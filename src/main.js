@@ -10,9 +10,7 @@ app.innerHTML = `
   </div>
   <aside class="control-panel glass">
     <p class="eyebrow">OBSERVATORY CONTROL</p>
-    <h1>Our cosmic<br/><em>system</em></h1>
-    <p class="intro">Explore the planets in real time. Sizes are approximately proportional to the Sun, while the orbits are visually compressed.</p>
-    <div class="control-row"><label>SIMULATION TIME <span id="speedValue">1×</span></label><input id="speed" type="range" min="0" max="100" value="1" /></div>
+    <h1>Our cosmic<br/><em>system</em></h1><div class="control-row"><label>SIMULATION TIME <span id="speedValue">1×</span></label><input id="speed" type="range" min="0" max="100" value="1" /></div>
     <div class="button-row"><button id="pause" class="primary">Ⅱ &nbsp; PAUSE</button><button id="reset" class="secondary">↺</button></div>
     <div class="toggle-row"><span>ORBITAL PATHS</span><button id="orbits" class="switch on"><span></span></button></div>
     <button id="systemView" class="system-view">⌾ &nbsp; FULL SYSTEM</button>
@@ -43,18 +41,44 @@ const sunTexture = textureLoader.load('/textures/sun.png'); sunTexture.colorSpac
 const system = new THREE.Group(); scene.add(system);
 const sun = new THREE.Mesh(new THREE.SphereGeometry(10, 64, 40), new THREE.MeshStandardMaterial({ color: 0xffc247, map:sunTexture, emissive: 0xff8a00, emissiveMap:sunTexture, emissiveIntensity: 1.45, roughness: 0.72, metalness: 0 })); system.add(sun);
 const sunShapeLight = new THREE.DirectionalLight(0xffd49a, 3.2); sunShapeLight.position.set(55, 45, 80); system.add(sunShapeLight);
-const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(15.5, 32, 24), new THREE.MeshBasicMaterial({ color: 0xffa31a, transparent: true, opacity: 0.27, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false })); system.add(sunGlow);
-const sunOuterGlow = new THREE.Mesh(new THREE.SphereGeometry(21, 32, 24), new THREE.MeshBasicMaterial({ color: 0xff7a16, transparent: true, opacity: 0.065, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false })); system.add(sunOuterGlow);
+// A single soft sprite avoids the hard, two-tone rings created by nested shells.
+const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 256;
+const glowContext = glowCanvas.getContext('2d');
+const glowGradient = glowContext.createRadialGradient(128, 128, 0, 128, 128, 128);
+glowGradient.addColorStop(0, 'rgba(255, 205, 85, 0.78)');
+glowGradient.addColorStop(0.28, 'rgba(255, 160, 35, 0.48)');
+glowGradient.addColorStop(0.62, 'rgba(255, 105, 12, 0.18)');
+glowGradient.addColorStop(1, 'rgba(255, 70, 0, 0)');
+glowContext.fillStyle = glowGradient; glowContext.fillRect(0, 0, 256, 256);
+const glowTexture = new THREE.CanvasTexture(glowCanvas); glowTexture.colorSpace = THREE.SRGBColorSpace;
+const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map:glowTexture, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:true }));
+sunGlow.scale.set(52, 52, 1); sunGlow.renderOrder = -1; system.add(sunGlow);
 
 const planets = [
   { name:'Mercury', color:0xb8a98f, radius:0.0366, orbit:22, period:0.241, eccentricity:0.206, tilt:0.03, texture:'/textures/mercury.png' }, { name:'Venus', color:0xe5a45d, radius:0.091, orbit:32, period:0.615, eccentricity:0.0067, tilt:0.02, texture:'/textures/venus.png' },
-  { name:'Earth', color:0x4a87c5, radius:0.0916, orbit:44, period:1, eccentricity:0.0167, tilt:0.04, texture:'/textures/earth.png' }, { name:'Mars', color:0xc8624c, radius:0.0488, orbit:57, period:1.881, eccentricity:0.0934, tilt:0.02 },
-  { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:82, period:11.86, eccentricity:0.0489, tilt:0.04 }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:110, period:29.46, eccentricity:0.0565, tilt:0.05, rings:true },
+  { name:'Earth', color:0x4a87c5, radius:0.0916, orbit:44, period:1, eccentricity:0.0167, tilt:0.04, texture:'/textures/earth.png' }, { name:'Mars', color:0xc8624c, radius:0.0488, orbit:57, period:1.881, eccentricity:0.0934, tilt:0.02, texture:'/textures/mars.png' },
+  { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:82, period:11.86, eccentricity:0.0489, tilt:0.04 }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:110, period:29.46, eccentricity:0.0565, tilt:0.05, texture:'/textures/saturn.png', rings:true },
   { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:138, period:84.01, eccentricity:0.046, tilt:0.04 }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:165, period:164.8, eccentricity:0.009, tilt:0.04 }
 ];
 const orbitGroup = new THREE.Group(); system.add(orbitGroup);
 const objects = [];
 let earthObject = null;
+const ringCanvas = document.createElement('canvas'); ringCanvas.width = ringCanvas.height = 512;
+const ringContext = ringCanvas.getContext('2d');
+const ringCenter = 256;
+const ringBands = [
+  [0.84, 0.34, 'rgba(201, 193, 174, 0.72)'],
+  [0.695, 0.018, 'rgba(150, 145, 132, 0.38)'], [0.735, 0.028, 'rgba(239, 230, 202, 0.88)'],
+  [0.775, 0.012, 'rgba(169, 163, 148, 0.34)'], [0.805, 0.035, 'rgba(230, 220, 193, 0.86)'],
+  [0.85, 0.018, 'rgba(46, 43, 39, 0.86)'], [0.885, 0.042, 'rgba(235, 225, 199, 0.82)'],
+  [0.925, 0.012, 'rgba(160, 154, 140, 0.36)'], [0.955, 0.030, 'rgba(215, 207, 187, 0.82)'],
+  [0.985, 0.012, 'rgba(145, 139, 127, 0.32)']
+];
+for (const [position, width, color] of ringBands) {
+  ringContext.beginPath(); ringContext.arc(ringCenter, ringCenter, position * ringCenter, 0, Math.PI * 2);
+  ringContext.lineWidth = width * ringCenter; ringContext.strokeStyle = color; ringContext.stroke();
+}
+const ringTexture = new THREE.CanvasTexture(ringCanvas); ringTexture.colorSpace = THREE.SRGBColorSpace;
 const legend = document.querySelector('#legend');
 for (const p of planets) {
   const semiMinor = p.orbit * Math.sqrt(1 - p.eccentricity * p.eccentricity);
@@ -67,7 +91,7 @@ for (const p of planets) {
   const texture = p.texture ? textureLoader.load(p.texture) : null;
   if(texture) texture.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.radius, 32, 20), new THREE.MeshLambertMaterial({ color:p.color, map:texture })); holder.add(mesh);
-  if (p.rings) { const ring = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.72, 64), new THREE.MeshBasicMaterial({ color:0xc9b98f, side:THREE.DoubleSide, transparent:true, opacity:0.58 })); ring.rotation.x=Math.PI/2.35; holder.add(ring); }
+  if (p.rings) { const ring = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.72, 96), new THREE.MeshBasicMaterial({ map:ringTexture, color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.82, depthWrite:false })); ring.rotation.x=Math.PI/2.35; holder.add(ring); }
   const item = document.createElement('button'); item.className='legend-item'; item.innerHTML=`<i style="background:#${p.color.toString(16).padStart(6,'0')}"></i><span>${p.name}</span><small>${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years</small>`; legend.append(item);
   const object = { holder, mesh, period:p.period, orbit:p.orbit, eccentricity:p.eccentricity, semiMinor, name:p.name, item };
   item.onclick=()=>focusPlanet(object); objects.push(object); if(p.name === 'Earth') earthObject = object;
