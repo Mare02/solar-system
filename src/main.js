@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import '@shoelace-style/shoelace/dist/themes/dark.css';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '@shoelace-style/shoelace/dist/components/card/card.js';
+import '@shoelace-style/shoelace/dist/components/range/range.js';
+import '@shoelace-style/shoelace/dist/components/switch/switch.js';
+import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -8,14 +14,14 @@ app.innerHTML = `
     <div class="brand"><span class="brand-mark">✦</span><div><strong>SOLAR SYSTEM</strong><small>EXPLORER / LIVE ORRERY</small></div></div>
     <div class="status"><span class="status-dot"></span><span id="statusText">SIMULATION ACTIVE</span></div>
   </div>
-  <aside class="control-panel glass">
+  <sl-card class="control-panel">
     <p class="eyebrow">OBSERVATORY CONTROL</p>
-    <h1>Our cosmic<br/><em>system</em></h1><div class="control-row"><label>SIMULATION TIME <span id="speedValue">1×</span></label><input id="speed" type="range" min="0" max="100" value="1" /></div>
-    <div class="button-row"><button id="pause" class="primary">Ⅱ &nbsp; PAUSE</button><button id="reset" class="secondary">↺</button></div>
-    <div class="toggle-row"><span>ORBITAL PATHS</span><button id="orbits" class="switch on"><span></span></button></div>
-    <button id="systemView" class="system-view">⌾ &nbsp; FULL SYSTEM</button>
+    <div class="control-row"><label>SIMULATION TIME <span id="speedValue">1×</span></label><sl-range id="speed" min="1" max="100" value="1" tooltip="none"></sl-range></div>
+    <div class="button-row"><sl-button id="pause" variant="primary" size="large">Ⅱ &nbsp; PAUSE</sl-button><sl-button id="reset" class="secondary" variant="default" size="large">↺</sl-button></div>
+    <div class="toggle-row"><span>ORBITAL PATHS</span><sl-switch id="orbits" checked aria-label="Toggle orbital paths"></sl-switch></div>
+    <sl-divider></sl-divider>
     <div class="legend" id="legend"></div>
-  </aside>
+  </sl-card>
   <div class="coordinates"><span id="simTime">SOL 001 · 00:00:00</span><span id="fps">LIVE / 60 FPS</span></div>
 `;
 
@@ -92,35 +98,44 @@ for (const p of planets) {
   if(texture) texture.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.radius, 32, 20), new THREE.MeshLambertMaterial({ color:p.color, map:texture })); holder.add(mesh);
   if (p.rings) { const ring = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.72, 96), new THREE.MeshBasicMaterial({ map:ringTexture, color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.82, depthWrite:false })); ring.rotation.x=Math.PI/2.35; holder.add(ring); }
-  const item = document.createElement('button'); item.className='legend-item'; item.innerHTML=`<i style="background:#${p.color.toString(16).padStart(6,'0')}"></i><span>${p.name}</span><small>${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years</small>`; legend.append(item);
+  const item = document.createElement('sl-button'); item.className='legend-item'; item.variant='text'; item.innerHTML=`<i style="background:#${p.color.toString(16).padStart(6,'0')}"></i><span>${p.name}</span><small>${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years</small>`; legend.append(item);
   const object = { holder, mesh, period:p.period, orbit:p.orbit, eccentricity:p.eccentricity, semiMinor, name:p.name, item };
   item.onclick=()=>focusPlanet(object); objects.push(object); if(p.name === 'Earth') earthObject = object;
 }
 const moonTexture = textureLoader.load('/textures/moon.png'); moonTexture.colorSpace = THREE.SRGBColorSpace;
 const moonOrbit = new THREE.Group(); earthObject.holder.add(moonOrbit);
+const moonOrbitPoints = [];
+for (let i = 0; i <= 128; i++) {
+  const angle = i / 128 * Math.PI * 2;
+  moonOrbitPoints.push(new THREE.Vector3(1.65 * Math.cos(angle), 0, 1.65 * Math.sin(angle)));
+}
+const moonOrbitLine = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(moonOrbitPoints),
+  new THREE.LineBasicMaterial({ color:0xbab8b0, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false })
+);
+moonOrbit.add(moonOrbitLine);
 const moonHolder = new THREE.Group(); moonHolder.position.set(1.65, 0, 0); moonOrbit.add(moonHolder);
 const moon = new THREE.Mesh(new THREE.SphereGeometry(0.025, 32, 20), new THREE.MeshLambertMaterial({ color:0xbab8b0, map:moonTexture })); moonHolder.add(moon);
-const moonItem = document.createElement('button'); moonItem.className='legend-item moon-item'; moonItem.innerHTML='<i style="background:#bab8b0"></i><span>Moon</span><small>27.32 days</small>'; legend.append(moonItem);
+const moonItem = document.createElement('sl-button'); moonItem.className='legend-item moon-item'; moonItem.variant='text'; moonItem.innerHTML='<i style="background:#bab8b0"></i><span>Moon</span><small>27.32 days</small>'; legend.append(moonItem);
 const moonObject = { holder:moonHolder, mesh:moon, period:27.3217/365.256, name:'Moon', item:moonItem };
 moonItem.onclick=()=>focusPlanet(moonObject);
-const sunItem = document.createElement('button'); sunItem.className='legend-item sun-item'; sunItem.innerHTML='<i style="background:#ffb632"></i><span>Sun</span><small>focus</small>'; legend.prepend(sunItem);
+const sunItem = document.createElement('sl-button'); sunItem.className='legend-item sun-item'; sunItem.variant='text'; sunItem.innerHTML='<i style="background:#ffb632"></i><span>Sun</span><small>focus</small>'; legend.prepend(sunItem);
 const sunObject = { mesh:sun, name:'Sun', item:sunItem };
 sunItem.onclick=()=>focusPlanet(sunObject);
 
 const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.dampingFactor=0.055; controls.minDistance=0.08; controls.maxDistance=1400; controls.target.set(0,0,0); controls.enablePan=true;
 let running=true, simSpeed=1, elapsed=0, focusedPlanet=null; const keys = {};
 const focusPoint = new THREE.Vector3();
-function focusPlanet(object){ focusedPlanet=object; object.mesh.getWorldPosition(focusPoint); const distance=Math.max(object.mesh.geometry.parameters.radius*25, 0.5); camera.position.copy(focusPoint).add(new THREE.Vector3(distance*0.7, distance*0.48, distance)); controls.target.copy(focusPoint); controls.update(); document.querySelectorAll('.legend-item').forEach(item=>item.classList.remove('selected')); object.item.classList.add('selected'); document.querySelector('#systemView').classList.remove('active'); }
-function focusSystem(){ focusedPlanet=null; camera.position.set(0,115,245); controls.target.set(0,0,0); controls.update(); document.querySelectorAll('.legend-item').forEach(item=>item.classList.remove('selected')); document.querySelector('#systemView').classList.add('active'); }
+function focusPlanet(object){ focusedPlanet=object; object.mesh.getWorldPosition(focusPoint); const distance=Math.max(object.mesh.geometry.parameters.radius*25, 0.5); camera.position.copy(focusPoint).add(new THREE.Vector3(distance*0.7, distance*0.48, distance)); controls.target.copy(focusPoint); controls.update(); document.querySelectorAll('.legend-item').forEach(item=>item.classList.remove('selected')); object.item.classList.add('selected'); }
+function focusSystem(){ focusedPlanet=null; camera.position.set(0,115,245); controls.target.set(0,0,0); controls.update(); document.querySelectorAll('.legend-item').forEach(item=>item.classList.remove('selected')); }
 addEventListener('keydown', e => { keys[e.code]=true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); if(e.code==='Space') togglePause(); });
 addEventListener('keyup', e => keys[e.code]=false);
 function togglePause(){ running=!running; document.querySelector('#pause').innerHTML=running?'Ⅱ &nbsp; PAUSE':'▶ &nbsp; RESUME'; document.querySelector('#statusText').textContent=running?'SIMULATION ACTIVE':'SIMULATION PAUSED'; }
 document.querySelector('#pause').onclick=togglePause;
 document.querySelector('#reset').onclick=()=>{ focusSystem(); elapsed=0; };
-document.querySelector('#systemView').onclick=focusSystem;
 function formatSpeed(value){ if(value===0)return '0×'; if(value>=1000000)return `${(value/1000000).toFixed(1)}M×`; if(value>=1000)return `${(value/1000).toFixed(value>=10000?0:1)}k×`; return `${value.toFixed(value<10?1:0)}×`; }
-document.querySelector('#speed').oninput=e=>{ const level=Number(e.target.value); simSpeed=level===0?0:10**((level-1)*(6/99)); document.querySelector('#speedValue').textContent=formatSpeed(simSpeed); };
-document.querySelector('#orbits').onclick=e=>{ e.currentTarget.classList.toggle('on'); orbitGroup.visible=e.currentTarget.classList.contains('on'); };
+document.querySelector('#speed').addEventListener('sl-input',e=>{ const level=Number(e.target.value); simSpeed=level===0?0:10**((level-1)*(6/99)); document.querySelector('#speedValue').textContent=formatSpeed(simSpeed); });
+document.querySelector('#orbits').addEventListener('sl-change',e=>{ orbitGroup.visible=e.target.checked; moonOrbitLine.visible=e.target.checked; });
 const clock = new THREE.Clock();
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); if(running){ elapsed+=dt*simSpeed; objects.forEach(o=>{ const angle=elapsed*(Math.PI*2/(o.period*365.256*86400)); o.holder.position.set(o.orbit*(Math.cos(angle)-o.eccentricity),0,o.semiMinor*Math.sin(angle)); o.mesh.rotation.y += dt*simSpeed*(Math.PI*2/(27*86400)); }); moonOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); moon.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); sun.rotation.y+=dt*simSpeed*(Math.PI*2/(25.38*86400)); }
   if(focusedPlanet){ focusedPlanet.mesh.getWorldPosition(focusPoint); const followDelta=focusPoint.clone().sub(controls.target); controls.target.copy(focusPoint); camera.position.add(followDelta); }
