@@ -153,13 +153,22 @@ canvas {
 
 .button-row sl-button {
   flex: 1;
+  --sl-input-height-large: 48px;
 }
 
 .button-row sl-button::part(base) {
   border: 0;
   border-radius: 3px;
-  font: 600 10px "DM Mono", monospace;
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.08em;
+}
+
+.button-row sl-button::part(label) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .button-row #pause {
