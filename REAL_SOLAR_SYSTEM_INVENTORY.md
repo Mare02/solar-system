@@ -1,15 +1,4 @@
-# Real Solar System Inventory
-
-## Current project coverage
-
-The project currently includes:
-
-- The Sun
-- All eight planets: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune
-- Earth’s Moon
-- Saturn’s rings
-
-The eight planets are complete. Mercury and Venus do not have confirmed natural moons.
+# Missing Solar System Inventory
 
 ## Missing planetary moons
 
@@ -37,7 +26,7 @@ Saturn has 274 confirmed moons. Important moons to add first are:
 - Tethys
 - Dione
 - Rhea
-- Titan
+✅ Titan
 - Hyperion
 - Iapetus
 - Phoebe
@@ -105,30 +94,6 @@ Neptune has 16 known moons:
 - S/2002 N5
 - S/2021 N1
 
-## Dwarf planets and their moons
-
-The project includes the five recognized dwarf planets as primary bodies. Their
-moons are intentionally not modeled in the scene.
-
-### Dwarf planets
-
-- Ceres
-- Pluto
-- Haumea
-- Makemake
-- Eris
-
-### Dwarf-planet moons
-
-- Pluto: Charon, Styx, Nix, Kerberos, Hydra
-- Haumea: Hiʻiaka, Namaka
-- Eris: Dysnomia
-- Ceres: no known moon
-- Makemake: one known moon, provisionally designated S/2015 (136472) 1
-
-The dwarf-planet moon list above is reference data only; no dwarf-planet moons
-are included in the explorer.
-
 ## Other missing solar-system objects
 
 - Ring systems around Jupiter, Uranus, and Neptune
@@ -136,6 +101,5 @@ are included in the explorer.
 - Kuiper Belt
 - Comets
 - Meteoroids and larger meteoroid streams
-- Other asteroids and their moons
 - Trans-Neptunian objects
 - The Oort Cloud

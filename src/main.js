@@ -139,8 +139,8 @@ const planets = [
   { name:'Mercury', color:0xb8a98f, radius:0.0366, orbit:22, period:0.241, eccentricity:0.206, tilt:0.03, texture:'/textures/mercury.png' }, { name:'Venus', color:0xe5a45d, radius:0.091, orbit:32, period:0.615, eccentricity:0.0067, tilt:0.02, texture:'/textures/venus.png' },
   { name:'Earth', color:0x4a87c5, radius:0.0916, orbit:44, period:1, eccentricity:0.0167, tilt:0.04, texture:'/textures/earth.png' }, { name:'Mars', color:0xe1c29b, radius:0.0488, orbit:57, period:1.881, eccentricity:0.0934, tilt:0.02, texture:'/textures/mars.png' },
   { name:'Ceres', color:0x67615b, radius:0.0068, orbit:67, period:4.605, eccentricity:0.0758, tilt:0.18, texture:'/textures/ceres.png' },
-  { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:82, period:11.86, eccentricity:0.0489, tilt:0.04, texture:'/textures/jupiter.png' }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:110, period:29.46, eccentricity:0.0565, tilt:0.05, texture:'/textures/saturn.png', rings:true },
-  { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:138, period:84.01, eccentricity:0.046, tilt:0.04, texture:'/textures/uranus.png' }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:165, period:164.8, eccentricity:0.009, tilt:0.04, texture:'/textures/neptune.png' },
+  { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:82, period:11.86, eccentricity:0.0489, tilt:0.04, axialTilt:0.054, texture:'/textures/jupiter.png', ringProfile:'jupiter' }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:110, period:29.46, eccentricity:0.0565, tilt:0.05, texture:'/textures/saturn.png', rings:true },
+  { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:138, period:84.01, eccentricity:0.046, tilt:0.04, axialTilt:0.12, texture:'/textures/uranus.png', ringProfile:'uranus' }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:165, period:164.8, eccentricity:0.009, tilt:0.04, axialTilt:THREE.MathUtils.degToRad(28.3), texture:'/textures/neptune.png', ringProfile:'neptune' },
   { name:'Pluto', color:0xb4a69a, radius:0.0171, orbit:216, period:247.94, eccentricity:0.2488, tilt:0.30, texture:'/textures/pluto.png' },
   { name:'Haumea', color:0xd2d6d7, radius:0.0100, orbit:236, period:283.8, eccentricity:0.1913, tilt:0.14, texture:'/textures/haumea.png' },
   { name:'Makemake', color:0xb87361, radius:0.0103, orbit:249, period:309.9, eccentricity:0.159, tilt:0.13, texture:'/textures/makemake.png' },
@@ -150,6 +150,7 @@ const orbitGroup = new THREE.Group(); system.add(orbitGroup);
 const objects = [];
 const pickableBodies = [];
 let earthObject = null;
+let saturnObject = null;
 const ringCanvas = document.createElement('canvas'); ringCanvas.width = ringCanvas.height = 512;
 const ringContext = ringCanvas.getContext('2d');
 const ringCenter = 256;
@@ -167,6 +168,123 @@ for (const [position, width, color] of ringBands) {
 }
 const ringTexture = new THREE.CanvasTexture(ringCanvas); ringTexture.colorSpace = THREE.SRGBColorSpace;
 const legend = document.querySelector('#legend');
+
+// The outer planets have very different rings. Keep each system layered and
+// translucent so it reads correctly as the camera moves through the scene.
+const ringProfiles = {
+  jupiter: {
+    outer: 2.18,
+    bands: [[1.34, 0.30, 0x9e9079, 0.34], [1.70, 0.07, 0xc2b294, 0.42], [1.91, 0.05, 0xd1c1a2, 0.30]],
+  },
+  uranus: {
+    outer: 2.28,
+    bands: [
+      [1.14, 0.012, 0x719fac, 0.42], [1.19, 0.018, 0xa8cbd4, 0.62],
+      [1.25, 0.010, 0x557f90, 0.38], [1.30, 0.022, 0xb8d9e0, 0.68],
+      [1.37, 0.014, 0x6a98a7, 0.48], [1.43, 0.025, 0xb3d4dc, 0.64],
+      [1.51, 0.012, 0x4f7e8e, 0.40], [1.57, 0.019, 0x9fc3ce, 0.58],
+      [1.64, 0.013, 0x638f9e, 0.46], [1.71, 0.027, 0xb9dbe2, 0.70],
+      [1.80, 0.011, 0x527f8f, 0.40], [1.87, 0.020, 0xa9cbd5, 0.60],
+      [1.95, 0.014, 0x5b8998, 0.44], [2.02, 0.024, 0xb4d5dd, 0.66],
+      [2.11, 0.012, 0x507c8b, 0.42], [2.17, 0.018, 0x9fc4ce, 0.56],
+      [2.23, 0.010, 0x6a95a2, 0.40],
+    ],
+  },
+  neptune: {
+    outer: 2.08,
+    bands: [[1.07, 0.032, 0x7d9bb4, 0.70], [1.31, 0.050, 0x9db8cc, 0.68], [1.59, 0.028, 0x6b88a4, 0.62], [1.88, 0.022, 0xb0c9d9, 0.52]],
+  },
+};
+
+function createUranusRingTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1024;
+  const context = canvas.getContext('2d');
+  const center = canvas.width / 2;
+  const random = (seed) => {
+    const value = Math.sin(seed * 12.9898) * 43758.5453;
+    return value - Math.floor(value);
+  };
+  // A few broad translucent lanes establish the soft body of the ring.
+  for (const [radius, width, color, opacity] of [
+    [0.30, 30, '160, 216, 229', 0.16],
+    [0.48, 18, '194, 231, 238', 0.25],
+    [0.64, 24, '105, 166, 184', 0.18],
+    [0.79, 16, '205, 235, 241', 0.24],
+    [0.91, 11, '126, 185, 199', 0.16],
+  ]) {
+    context.beginPath();
+    context.arc(center, center, radius * center, 0, Math.PI * 2);
+    context.lineWidth = width;
+    context.strokeStyle = `rgba(${color}, ${opacity})`;
+    context.stroke();
+  }
+  // Dense, subtly irregular fine structure prevents the ring from reading as
+  // a set of equally spaced wire hoops.
+  for (let i = 0; i < 54; i += 1) {
+    const radius = 0.22 + (i / 53) * 0.73;
+    const width = 1 + random(i + 4) * 4.5;
+    const alpha = 0.16 + random(i + 20) * 0.44;
+    const blue = 150 + Math.floor(random(i + 50) * 65);
+    context.beginPath();
+    context.arc(center, center, radius * center, 0, Math.PI * 2);
+    context.lineWidth = width;
+    context.strokeStyle = `rgba(${blue - 24}, ${blue + 28}, ${blue + 36}, ${alpha})`;
+    context.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+const uranusRingTexture = createUranusRingTexture();
+
+function createRingSystem(planet, profileName) {
+  const profile = ringProfiles[profileName];
+  const group = new THREE.Group();
+  group.rotation.x = Math.PI / 2 + (planet.axialTilt ?? 0);
+  if (profileName === 'uranus' || profileName === 'neptune') {
+    const ringInnerRadius = planet.radius * (profileName === 'neptune' ? 1.76 : 1.57);
+    const ringOuterRadius = planet.radius * 2.34;
+    const baseColor = profileName === 'uranus' ? 0x79afbd : 0x587ba9;
+    const textureColor = profileName === 'uranus' ? 0xd6f1f4 : 0x9eb8df;
+    if (profileName === 'neptune') {
+      const innerRing = new THREE.Mesh(
+        new THREE.RingGeometry(planet.radius * 1.49, planet.radius * 1.515, 192),
+        new THREE.MeshBasicMaterial({ color:0x8ca9d3, transparent:true, opacity:0.48, side:THREE.DoubleSide, depthWrite:false })
+      );
+      group.add(innerRing);
+    }
+    const ringBase = new THREE.Mesh(
+      new THREE.RingGeometry(ringInnerRadius, ringOuterRadius, 192),
+      new THREE.MeshBasicMaterial({ color:baseColor, transparent:true, opacity:0.08, side:THREE.DoubleSide, depthWrite:false })
+    );
+    group.add(ringBase);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(ringInnerRadius, ringOuterRadius, 192),
+      new THREE.MeshBasicMaterial({ map:uranusRingTexture, color:textureColor, transparent:true, opacity:0.72, side:THREE.DoubleSide, depthWrite:false })
+    );
+    group.add(ring);
+    return group;
+  }
+  for (const [radius, width, color, opacity] of profile.bands) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(planet.radius * radius, planet.radius * (radius + width), 128),
+      new THREE.MeshBasicMaterial({ color, transparent:true, opacity, side:THREE.DoubleSide, depthWrite:false })
+    );
+    group.add(ring);
+  }
+  // A broad, nearly invisible dust envelope gives Jupiter and Neptune the
+  // soft outer glow visible in long-exposure observations.
+  if (profileName === 'jupiter' || profileName === 'neptune') {
+    const dust = new THREE.Mesh(
+      new THREE.RingGeometry(planet.radius * (profileName === 'jupiter' ? 1.30 : 0.94), planet.radius * profile.outer, 128),
+      new THREE.MeshBasicMaterial({ color: profileName === 'jupiter' ? 0x998a73 : 0x7896ae, transparent:true, opacity:0.085, side:THREE.DoubleSide, depthWrite:false })
+    );
+    group.add(dust);
+  }
+  return group;
+}
 
 function createLegendItem({ name, color, period, parent }) {
   const item = document.createElement('sl-tree-item');
@@ -188,11 +306,13 @@ for (const p of planets) {
   if(texture) texture.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.radius, 32, 20), new THREE.MeshLambertMaterial({ color:p.color, map:texture })); holder.add(mesh);
   if (p.rings) { const ring = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.72, 96), new THREE.MeshBasicMaterial({ map:ringTexture, color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.82, depthWrite:false })); ring.rotation.x=Math.PI/2.35; holder.add(ring); }
+  if (p.ringProfile) holder.add(createRingSystem(p, p.ringProfile));
   const item = createLegendItem({ name: p.name, color: p.color, period: `${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years`, parent: legend });
   const object = { holder, mesh, period:p.period, orbit:p.orbit, eccentricity:p.eccentricity, semiMinor, name:p.name, item };
-  item.onclick=()=>focusPlanet(object); objects.push(object); pickableBodies.push(mesh); mesh.userData.focusObject = object; if(p.name === 'Earth') earthObject = object;
+  item.onclick=()=>focusPlanet(object); objects.push(object); pickableBodies.push(mesh); mesh.userData.focusObject = object; if(p.name === 'Earth') earthObject = object; if(p.name === 'Saturn') saturnObject = object;
 }
 const moonTexture = textureLoader.load('/textures/moon.png'); moonTexture.colorSpace = THREE.SRGBColorSpace;
+const titanTexture = textureLoader.load('/textures/titan.png'); titanTexture.colorSpace = THREE.SRGBColorSpace;
 const moonOrbit = new THREE.Group(); earthObject.holder.add(moonOrbit);
 const moonOrbitPoints = [];
 for (let i = 0; i <= 128; i++) {
@@ -210,6 +330,35 @@ const earthItem = objects.find(object => object.name === 'Earth').item;
 const moonItem = createLegendItem({ name: 'Moon', color: 0xbab8b0, period: '27.32 days', parent: earthItem }); moonItem.classList.add('moon-item');
 const moonObject = { holder:moonHolder, mesh:moon, period:27.3217/365.256, name:'Moon', item:moonItem };
 moonItem.onclick=(event)=>{ event.stopPropagation(); focusPlanet(moonObject); }; pickableBodies.push(moon); moon.userData.focusObject = moonObject;
+
+// Titan is authored from the real Saturn/Titan proportions:
+// radius = 2,574.7 km / 60,268 km = 0.04272 Saturn radii;
+// orbit = 1,221,870 km = 20.28 Saturn radii; period = 15.945 days.
+const titanOrbit = new THREE.Group(); saturnObject.holder.add(titanOrbit);
+const titanRadius = 0.837 * (2574.7 / 60268);
+const titanOrbitRadius = 0.837 * (1221870 / 60268);
+const titanOrbitPoints = [];
+for (let i = 0; i <= 128; i++) {
+  const angle = i / 128 * Math.PI * 2;
+  titanOrbitPoints.push(new THREE.Vector3(titanOrbitRadius * Math.cos(angle), 0, titanOrbitRadius * Math.sin(angle)));
+}
+const titanOrbitLine = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(titanOrbitPoints),
+  new THREE.LineBasicMaterial({ color:0xc18c65, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false })
+);
+titanOrbit.add(titanOrbitLine);
+const titanHolder = new THREE.Group(); titanHolder.position.set(titanOrbitRadius, 0, 0); titanOrbit.add(titanHolder);
+const titan = new THREE.Mesh(
+  new THREE.SphereGeometry(titanRadius, 32, 20),
+  new THREE.MeshLambertMaterial({ color:0xffffff, map:titanTexture })
+);
+titanHolder.add(titan);
+const saturnItem = objects.find(object => object.name === 'Saturn').item;
+const titanItem = createLegendItem({ name:'Titan', color:0xb2764f, period:'15.945 days', parent:saturnItem });
+titanItem.classList.add('moon-item');
+const titanObject = { holder:titanHolder, mesh:titan, period:15.945/365.256, name:'Titan', item:titanItem, focusDistance:0.18 };
+titanItem.onclick=(event)=>{ event.stopPropagation(); focusPlanet(titanObject); };
+pickableBodies.push(titan); titan.userData.focusObject = titanObject;
 // Low-detail ISS model. Dimensions are kept at real scale relative to Earth:
 // the 109 m solar-array span is approximately 8.6 millionths of Earth's diameter.
 const satelliteOrbit = new THREE.Group(); earthObject.holder.add(satelliteOrbit);
@@ -411,7 +560,7 @@ updateSimulationState();
 document.querySelector('#reset').onclick=()=>{ focusSystem(); elapsed=0; };
 function formatSpeed(value){ if(value===0)return '0×'; if(value>=1000000)return `${(value/1000000).toFixed(1)}M×`; if(value>=1000)return `${(value/1000).toFixed(value>=10000?0:1)}k×`; return `${value.toFixed(value<10?1:0)}×`; }
 document.querySelector('#speed').addEventListener('sl-input',e=>{ const level=Number(e.target.value); simSpeed=level===0?0:10**((level-1)*(6/99)); document.querySelector('#speedValue').textContent=formatSpeed(simSpeed); });
-document.querySelector('#orbits').addEventListener('sl-change',e=>{ orbitGroup.visible=e.target.checked; moonOrbitLine.visible=e.target.checked; });
+document.querySelector('#orbits').addEventListener('sl-change',e=>{ orbitGroup.visible=e.target.checked; moonOrbitLine.visible=e.target.checked; titanOrbitLine.visible=e.target.checked; });
 const audioToggle = document.querySelector('#audioToggle');
 audioToggle.addEventListener('click', () => {
   if (audioEnabled && !audioStarted) startAmbientAudio();
@@ -451,7 +600,7 @@ document.addEventListener('pointerdown', event => {
   controlPanel.hide();
 });
 const clock = new THREE.Clock();
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); if(running){ elapsed+=dt*simSpeed; objects.forEach(o=>{ const angle=elapsed*(Math.PI*2/(o.period*365.256*86400)); o.holder.position.set(o.orbit*(Math.cos(angle)-o.eccentricity),0,o.semiMinor*Math.sin(angle)); o.mesh.rotation.y += dt*simSpeed*(Math.PI*2/(27*86400)); }); moonOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); moon.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); satelliteOrbit.rotation.y += dt*simSpeed*(Math.PI*2/satelliteOrbitPeriodSeconds); satellite.rotation.y += dt*simSpeed*0.16; sun.rotation.y+=dt*simSpeed*(Math.PI*2/(25.38*86400)); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); if(running){ elapsed+=dt*simSpeed; objects.forEach(o=>{ const angle=elapsed*(Math.PI*2/(o.period*365.256*86400)); o.holder.position.set(o.orbit*(Math.cos(angle)-o.eccentricity),0,o.semiMinor*Math.sin(angle)); o.mesh.rotation.y += dt*simSpeed*(Math.PI*2/(27*86400)); }); moonOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); moon.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); titanOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(15.945*86400)); titan.rotation.y += dt*simSpeed*(Math.PI*2/(15.945*86400)); satelliteOrbit.rotation.y += dt*simSpeed*(Math.PI*2/satelliteOrbitPeriodSeconds); satellite.rotation.y += dt*simSpeed*0.16; sun.rotation.y+=dt*simSpeed*(Math.PI*2/(25.38*86400)); }
   if(focusedPlanet){ focusedPlanet.mesh.getWorldPosition(focusPoint); const followDelta=focusPoint.clone().sub(controls.target); controls.target.copy(focusPoint); camera.position.add(followDelta); }
   const move = (keys.KeyW||keys.ArrowUp?1:0) - (keys.KeyS||keys.ArrowDown?1:0); const strafe=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0); const lift=(keys.KeyE?1:0)-(keys.KeyQ?1:0); const speed=(keys.ShiftLeft||keys.ShiftRight?1.8:0.7)*dt; camera.translateZ(-move*speed*20); camera.translateX(strafe*speed*20); camera.translateY(lift*speed*20); controls.update(); renderer.render(scene,camera); document.querySelector('#simTime').textContent=`SOL ${String(Math.floor(elapsed/86400)+1).padStart(3,'0')} · ${new Date(elapsed*1000).toISOString().slice(11,19)}`; }
 animate();
