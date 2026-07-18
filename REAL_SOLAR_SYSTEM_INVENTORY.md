@@ -107,7 +107,8 @@ Neptune has 16 known moons:
 
 ## Dwarf planets and their moons
 
-The project does not currently include dwarf planets or their satellites.
+The project includes the five recognized dwarf planets as primary bodies. Their
+moons are intentionally not modeled in the scene.
 
 ### Dwarf planets
 
@@ -125,6 +126,9 @@ The project does not currently include dwarf planets or their satellites.
 - Ceres: no known moon
 - Makemake: one known moon, provisionally designated S/2015 (136472) 1
 
+The dwarf-planet moon list above is reference data only; no dwarf-planet moons
+are included in the explorer.
+
 ## Other missing solar-system objects
 
 - Ring systems around Jupiter, Uranus, and Neptune
@@ -135,16 +139,3 @@ The project does not currently include dwarf planets or their satellites.
 - Other asteroids and their moons
 - Trans-Neptunian objects
 - The Oort Cloud
-
-## Scope note
-
-The exact number of small moons changes as new satellites are discovered and confirmed. NASA reported more than 891 confirmed moons across the solar system as of March 25, 2025. The planet-specific counts above use NASA pages updated through 2026 and are intended as a current reference for the project.
-
-## Sources
-
-- [NASA: About the Planets](https://science.nasa.gov/solar-system/planets/)
-- [NASA: Moons](https://science.nasa.gov/solar-system/moons/)
-- [NASA: Jupiter Moons](https://science.nasa.gov/jupiter/jupiter-moons/)
-- [NASA: Saturn Moons](https://science.nasa.gov/saturn/moons/)
-- [NASA: Uranus Moons](https://science.nasa.gov/uranus/moons/)
-- [NASA: Neptune Moons](https://science.nasa.gov/neptune/moons/)

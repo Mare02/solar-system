@@ -101,9 +101,11 @@ document.addEventListener('keydown', startAmbientAudio, { passive: true });
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x03050d);
 scene.fog = new THREE.FogExp2(0x03050d, 0.00055);
+// Keep a sane near plane for stable depth precision across the full system.
+// The satellite's explicit focus distance is still close enough for inspection.
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.01, 10000);
 camera.position.set(0, 115, 245);
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.prepend(renderer.domElement);
 
@@ -136,8 +138,13 @@ sunGlow.scale.set(52, 52, 1); sunGlow.renderOrder = -1; system.add(sunGlow);
 const planets = [
   { name:'Mercury', color:0xb8a98f, radius:0.0366, orbit:22, period:0.241, eccentricity:0.206, tilt:0.03, texture:'/textures/mercury.png' }, { name:'Venus', color:0xe5a45d, radius:0.091, orbit:32, period:0.615, eccentricity:0.0067, tilt:0.02, texture:'/textures/venus.png' },
   { name:'Earth', color:0x4a87c5, radius:0.0916, orbit:44, period:1, eccentricity:0.0167, tilt:0.04, texture:'/textures/earth.png' }, { name:'Mars', color:0xe1c29b, radius:0.0488, orbit:57, period:1.881, eccentricity:0.0934, tilt:0.02, texture:'/textures/mars.png' },
+  { name:'Ceres', color:0x67615b, radius:0.0068, orbit:67, period:4.605, eccentricity:0.0758, tilt:0.18, texture:'/textures/ceres.png' },
   { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:82, period:11.86, eccentricity:0.0489, tilt:0.04, texture:'/textures/jupiter.png' }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:110, period:29.46, eccentricity:0.0565, tilt:0.05, texture:'/textures/saturn.png', rings:true },
-  { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:138, period:84.01, eccentricity:0.046, tilt:0.04, texture:'/textures/uranus.png' }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:165, period:164.8, eccentricity:0.009, tilt:0.04, texture:'/textures/neptune.png' }
+  { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:138, period:84.01, eccentricity:0.046, tilt:0.04, texture:'/textures/uranus.png' }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:165, period:164.8, eccentricity:0.009, tilt:0.04, texture:'/textures/neptune.png' },
+  { name:'Pluto', color:0xb4a69a, radius:0.0171, orbit:216, period:247.94, eccentricity:0.2488, tilt:0.30, texture:'/textures/pluto.png' },
+  { name:'Haumea', color:0xd2d6d7, radius:0.0100, orbit:236, period:283.8, eccentricity:0.1913, tilt:0.14, texture:'/textures/haumea.png' },
+  { name:'Makemake', color:0xb87361, radius:0.0103, orbit:249, period:309.9, eccentricity:0.159, tilt:0.13, texture:'/textures/makemake.png' },
+  { name:'Eris', color:0xd9dce0, radius:0.0167, orbit:371, period:557.7, eccentricity:0.4407, tilt:0.44, texture:'/textures/eris.png' }
 ];
 const orbitGroup = new THREE.Group(); system.add(orbitGroup);
 const objects = [];
@@ -203,11 +210,83 @@ const earthItem = objects.find(object => object.name === 'Earth').item;
 const moonItem = createLegendItem({ name: 'Moon', color: 0xbab8b0, period: '27.32 days', parent: earthItem }); moonItem.classList.add('moon-item');
 const moonObject = { holder:moonHolder, mesh:moon, period:27.3217/365.256, name:'Moon', item:moonItem };
 moonItem.onclick=(event)=>{ event.stopPropagation(); focusPlanet(moonObject); }; pickableBodies.push(moon); moon.userData.focusObject = moonObject;
+// Low-detail ISS model. Dimensions are kept at real scale relative to Earth:
+// the 109 m solar-array span is approximately 8.6 millionths of Earth's diameter.
+const satelliteOrbit = new THREE.Group(); earthObject.holder.add(satelliteOrbit);
+satelliteOrbit.rotation.z = THREE.MathUtils.degToRad(51.6);
+const satelliteHolder = new THREE.Group();
+satelliteHolder.position.set(earthObject.mesh.geometry.parameters.radius * 1.068, 0, 0);
+satelliteOrbit.add(satelliteHolder);
+const satellite = new THREE.Group();
+satellite.rotation.set(0.22, -0.48, 0.1);
+satelliteHolder.add(satellite);
+// Earth radius is represented by the scene radius in kilometres; satellite
+// geometry below is authored in metres, so convert Earth's radius to metres.
+const satelliteScale = earthObject.mesh.geometry.parameters.radius / 6371000;
+const satMetal = new THREE.MeshStandardMaterial({ color:0xd5d6d0, metalness:0.68, roughness:0.34 });
+const satDarkMetal = new THREE.MeshStandardMaterial({ color:0x343b3d, metalness:0.76, roughness:0.32 });
+const satGold = new THREE.MeshStandardMaterial({ color:0xdba94e, metalness:0.42, roughness:0.34 });
+const satWhite = new THREE.MeshStandardMaterial({ color:0xe5e3d9, metalness:0.36, roughness:0.48 });
+const satRed = new THREE.MeshStandardMaterial({ color:0xa54532, metalness:0.3, roughness:0.45 });
+const satPanel = new THREE.MeshStandardMaterial({ color:0x173c68, metalness:0.55, roughness:0.28, emissive:0x06101f, emissiveIntensity:0.55 });
+const satPanelGold = new THREE.MeshStandardMaterial({ color:0x9c5b24, metalness:0.5, roughness:0.31, emissive:0x241005, emissiveIntensity:0.3 });
+const satRivet = new THREE.MeshStandardMaterial({ color:0xd7a348, metalness:0.58, roughness:0.3 });
+function addSatBox(size, material, position, rotation = [0, 0, 0]) {
+  const part = new THREE.Mesh(new THREE.BoxGeometry(size[0] * satelliteScale, size[1] * satelliteScale, size[2] * satelliteScale), material);
+  part.position.set(position[0] * satelliteScale, position[1] * satelliteScale, position[2] * satelliteScale);
+  part.rotation.set(...rotation); satellite.add(part); return part;
+}
+// Main pressurized modules and the long S6-to-P6 central truss.
+addSatBox([5.0, 4.0, 4.0], satWhite, [0, 0, 0]);
+addSatBox([7.0, 0.55, 0.55], satDarkMetal, [0, 0, 0]);
+addSatBox([1.2, 1.2, 1.2], satGold, [-2.85, 0, 0]);
+addSatBox([1.2, 1.2, 1.2], satGold, [2.85, 0, 0]);
+addSatBox([7.0, 0.24, 0.24], satWhite, [0, 1.55, 0]);
+addSatBox([7.0, 0.24, 0.24], satWhite, [0, -1.55, 0]);
+// Soyuz/Dragon-like docked capsules and the red aft service section.
+addSatBox([2.2, 2.0, 2.0], satMetal, [-4.0, 0, 0]);
+addSatBox([1.4, 1.8, 1.8], satRed, [4.0, 0, 0]);
+addSatBox([1.0, 1.0, 1.0], satWhite, [5.2, 0, 0]);
+// Two continuous solar-array wings: one connected, riveted panel on each side.
+// This keeps the satellite silhouette readable at focus distance.
+for (const side of [-1, 1]) {
+  const panelCenter = side * 27;
+  const panelWidth = 42;
+  addSatBox([panelWidth, 10.8, 0.16], side === 1 ? satPanelGold : satPanel, [panelCenter, 0, 0]);
+  addSatBox([panelWidth + 0.35, 0.1, 0.1], satGold, [panelCenter, 5.5, 0]);
+  addSatBox([panelWidth + 0.35, 0.1, 0.1], satGold, [panelCenter, -5.5, 0]);
+  addSatBox([0.1, 11.0, 0.1], satGold, [side * 5.8, 0, 0]);
+  addSatBox([0.1, 11.0, 0.1], satGold, [side * 48.2, 0, 0]);
+  // Sparse crossbars read as photovoltaic cell seams and riveted framing.
+  for (const xOffset of [-15.75, -5.25, 5.25, 15.75]) {
+    addSatBox([0.055, 10.55, 0.055], satRivet, [panelCenter + xOffset, 0, 0.12]);
+  }
+  for (const yOffset of [-4.4, -2.2, 0, 2.2, 4.4]) {
+    addSatBox([41.7, 0.055, 0.055], satRivet, [panelCenter, yOffset, 0.12]);
+  }
+}
+// Radiators, dish antenna, and a simple Canadarm-style robotic arm.
+addSatBox([1.2, 0.12, 8.0], satMetal, [0, 0, 3.7]);
+addSatBox([1.2, 0.12, 8.0], satMetal, [0, 0, -3.7]);
+const satDish = new THREE.Mesh(new THREE.ConeGeometry(1.35 * satelliteScale, 0.6 * satelliteScale, 24, 1, true), satMetal);
+satDish.position.set(0, 2.2 * satelliteScale, 0); satDish.rotation.x = Math.PI; satellite.add(satDish);
+addSatBox([0.28, 5.0, 0.28], satDarkMetal, [0, 3.9, 0]);
+addSatBox([0.28, 0.28, 5.5], satDarkMetal, [0, 6.1, 0]);
+addSatBox([0.22, 0.22, 3.2], satGold, [0, 6.1, -1.8]);
+addSatBox([0.22, 0.22, 3.2], satGold, [0, 6.1, 1.8]);
+const satellitePickTarget = new THREE.Mesh(new THREE.SphereGeometry(5.5 * satelliteScale, 16, 12), new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false }));
+satelliteHolder.add(satellitePickTarget);
+const satelliteOrbitPeriodSeconds = 91.6 * 60;
+const satelliteItem = createLegendItem({ name:'Satellite', color:0xd8a746, period:'91.6 min', parent:earthItem });
+satelliteItem.classList.add('satellite-item');
+const satelliteObject = { holder:satelliteHolder, mesh:satellitePickTarget, period:satelliteOrbitPeriodSeconds, name:'Satellite', item:satelliteItem, focusDistance:0.000004 };
+satelliteItem.onclick=(event)=>{ event.stopPropagation(); focusPlanet(satelliteObject); };
+pickableBodies.push(satellitePickTarget); satellitePickTarget.userData.focusObject = satelliteObject;
 const sunItem = createLegendItem({ name:'Sun', color:0xffb632, period:'', parent: legend }); sunItem.classList.add('sun-item'); legend.prepend(sunItem);
 const sunObject = { mesh:sun, name:'Sun', item:sunItem };
 sunItem.onclick=()=>focusPlanet(sunObject); pickableBodies.push(sun); sun.userData.focusObject = sunObject;
 
-const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.dampingFactor=0.055; controls.minDistance=0.08; controls.maxDistance=1400; controls.target.set(0,0,0); controls.enablePan=true;
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.dampingFactor=0.055; controls.minDistance=0.00000001; controls.maxDistance=1400; controls.target.set(0,0,0); controls.enablePan=true;
 // Shift + left-drag pans the camera without changing the normal orbit gesture.
 let shiftPan = null;
 const panRight = new THREE.Vector3();
@@ -235,7 +314,8 @@ function beginShiftPan(event) {
   // on the next animation frame.
   if (focusedPlanet) {
     focusedPlanet = null;
-    setSelectedLegendItem(null);
+    camera.near = 0.01;
+    camera.updateProjectionMatrix();
   }
   shiftPan = { x: event.clientX, y: event.clientY };
   renderer.domElement.classList.add('is-panning');
@@ -307,9 +387,17 @@ let running=true, simSpeed=1, elapsed=0, focusedPlanet=earthObject; const keys =
 const focusPoint = new THREE.Vector3();
 function setSelectedLegendItem(selectedItem){ document.querySelectorAll('.legend-item').forEach(item=>{ item.selected = item === selectedItem; item.classList.toggle('selected', item === selectedItem); }); }
 setSelectedLegendItem(earthObject.item);
-function focusPlanet(object){ focusedPlanet=object; object.mesh.getWorldPosition(focusPoint); const distance=Math.max(object.mesh.geometry.parameters.radius*25, 0.5); camera.position.copy(focusPoint).add(new THREE.Vector3(distance*0.7, distance*0.48, distance)); controls.target.copy(focusPoint); controls.update(); setSelectedLegendItem(object.item); }
+function focusPlanet(object){
+  focusedPlanet=object;
+  camera.near = object.focusDistance ? 0.00000001 : 0.01;
+  camera.updateProjectionMatrix();
+  object.mesh.getWorldPosition(focusPoint);
+  const distance=object.focusDistance ?? Math.max(object.mesh.geometry.parameters.radius*25, 0.5);
+  camera.position.copy(focusPoint).add(new THREE.Vector3(distance*0.7, distance*0.48, distance));
+  controls.target.copy(focusPoint); controls.update(); setSelectedLegendItem(object.item);
+}
 focusPlanet(earthObject);
-function focusSystem(){ focusedPlanet=null; camera.position.set(0,115,245); controls.target.set(0,0,0); controls.update(); setSelectedLegendItem(null); }
+function focusSystem(){ focusedPlanet=null; camera.near=0.01; camera.updateProjectionMatrix(); camera.position.set(0,115,245); controls.target.set(0,0,0); controls.update(); setSelectedLegendItem(null); }
 addEventListener('keydown', e => { keys[e.code]=true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); if(e.code==='Space') togglePause(); });
 addEventListener('keyup', e => keys[e.code]=false);
 const pauseIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M6 4h4v16H6zm8 0h4v16h-4z'/%3E%3C/svg%3E";
@@ -363,7 +451,7 @@ document.addEventListener('pointerdown', event => {
   controlPanel.hide();
 });
 const clock = new THREE.Clock();
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); if(running){ elapsed+=dt*simSpeed; objects.forEach(o=>{ const angle=elapsed*(Math.PI*2/(o.period*365.256*86400)); o.holder.position.set(o.orbit*(Math.cos(angle)-o.eccentricity),0,o.semiMinor*Math.sin(angle)); o.mesh.rotation.y += dt*simSpeed*(Math.PI*2/(27*86400)); }); moonOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); moon.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); sun.rotation.y+=dt*simSpeed*(Math.PI*2/(25.38*86400)); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); if(running){ elapsed+=dt*simSpeed; objects.forEach(o=>{ const angle=elapsed*(Math.PI*2/(o.period*365.256*86400)); o.holder.position.set(o.orbit*(Math.cos(angle)-o.eccentricity),0,o.semiMinor*Math.sin(angle)); o.mesh.rotation.y += dt*simSpeed*(Math.PI*2/(27*86400)); }); moonOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); moon.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); satelliteOrbit.rotation.y += dt*simSpeed*(Math.PI*2/satelliteOrbitPeriodSeconds); satellite.rotation.y += dt*simSpeed*0.16; sun.rotation.y+=dt*simSpeed*(Math.PI*2/(25.38*86400)); }
   if(focusedPlanet){ focusedPlanet.mesh.getWorldPosition(focusPoint); const followDelta=focusPoint.clone().sub(controls.target); controls.target.copy(focusPoint); camera.position.add(followDelta); }
   const move = (keys.KeyW||keys.ArrowUp?1:0) - (keys.KeyS||keys.ArrowDown?1:0); const strafe=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0); const lift=(keys.KeyE?1:0)-(keys.KeyQ?1:0); const speed=(keys.ShiftLeft||keys.ShiftRight?1.8:0.7)*dt; camera.translateZ(-move*speed*20); camera.translateX(strafe*speed*20); camera.translateY(lift*speed*20); controls.update(); renderer.render(scene,camera); document.querySelector('#simTime').textContent=`SOL ${String(Math.floor(elapsed/86400)+1).padStart(3,'0')} · ${new Date(elapsed*1000).toISOString().slice(11,19)}`; }
 animate();
