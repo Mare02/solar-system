@@ -107,10 +107,18 @@ const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.01, 1
 camera.position.set(0, 115, 245);
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.body.prepend(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0x59627f, 1.15));
-const sunLight = new THREE.PointLight(0xfff0cc, 950, 1200, 1.25); scene.add(sunLight);
+// Space should not be evenly lit: the Sun supplies the direct light and the
+// fill is deliberately faint so the night side remains almost black.
+scene.add(new THREE.AmbientLight(0x141a2b, 0.055));
+scene.add(new THREE.HemisphereLight(0x263550, 0x02030a, 0.045));
+// A point light at the Sun gives every body the correct light direction. A
+// softer-than-physical falloff keeps distant planets such as Pluto readable
+// because this visualization compresses the real solar-system distances.
+const sunLight = new THREE.PointLight(0xfff0cc, 1800, 1200, 1.25); scene.add(sunLight);
 
 // Radial star field: tiny, distant points make the scene feel deep without distracting from the orbits.
 const starPositions = new Float32Array(2600 * 3);
@@ -121,7 +129,6 @@ const textureLoader = new THREE.TextureLoader();
 const sunTexture = textureLoader.load('/textures/sun.png'); sunTexture.colorSpace = THREE.SRGBColorSpace;
 const system = new THREE.Group(); scene.add(system);
 const sun = new THREE.Mesh(new THREE.SphereGeometry(10, 64, 40), new THREE.MeshStandardMaterial({ color: 0xffc247, map:sunTexture, emissive: 0xff8a00, emissiveMap:sunTexture, emissiveIntensity: 1.45, roughness: 0.72, metalness: 0 })); system.add(sun);
-const sunShapeLight = new THREE.DirectionalLight(0xffd49a, 3.2); sunShapeLight.position.set(55, 45, 80); system.add(sunShapeLight);
 // A single soft sprite avoids the hard, two-tone rings created by nested shells.
 const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 256;
 const glowContext = glowCanvas.getContext('2d');
@@ -304,7 +311,11 @@ for (const p of planets) {
   const holder = new THREE.Group(); holder.position.set(p.orbit*(1-p.eccentricity), 0, 0); pivot.add(holder);
   const texture = p.texture ? textureLoader.load(p.texture) : null;
   if(texture) texture.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.radius, 32, 20), new THREE.MeshLambertMaterial({ color:p.color, map:texture })); holder.add(mesh);
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(p.radius, 32, 20),
+    new THREE.MeshStandardMaterial({ color:p.color, map:texture, roughness:0.9, metalness:0 })
+  );
+  holder.add(mesh);
   if (p.rings) { const ring = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.72, 96), new THREE.MeshBasicMaterial({ map:ringTexture, color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.82, depthWrite:false })); ring.rotation.x=Math.PI/2.35; holder.add(ring); }
   if (p.ringProfile) holder.add(createRingSystem(p, p.ringProfile));
   const item = createLegendItem({ name: p.name, color: p.color, period: `${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years`, parent: legend });
@@ -325,7 +336,10 @@ const moonOrbitLine = new THREE.Line(
 );
 moonOrbit.add(moonOrbitLine);
 const moonHolder = new THREE.Group(); moonHolder.position.set(1.65, 0, 0); moonOrbit.add(moonHolder);
-const moon = new THREE.Mesh(new THREE.SphereGeometry(0.025, 32, 20), new THREE.MeshLambertMaterial({ color:0xbab8b0, map:moonTexture })); moonHolder.add(moon);
+const moon = new THREE.Mesh(
+  new THREE.SphereGeometry(0.025, 32, 20),
+  new THREE.MeshStandardMaterial({ color:0xbab8b0, map:moonTexture, roughness:0.95, metalness:0 })
+); moonHolder.add(moon);
 const earthItem = objects.find(object => object.name === 'Earth').item;
 const moonItem = createLegendItem({ name: 'Moon', color: 0xbab8b0, period: '27.32 days', parent: earthItem }); moonItem.classList.add('moon-item');
 const moonObject = { holder:moonHolder, mesh:moon, period:27.3217/365.256, name:'Moon', item:moonItem };
@@ -350,7 +364,7 @@ titanOrbit.add(titanOrbitLine);
 const titanHolder = new THREE.Group(); titanHolder.position.set(titanOrbitRadius, 0, 0); titanOrbit.add(titanHolder);
 const titan = new THREE.Mesh(
   new THREE.SphereGeometry(titanRadius, 32, 20),
-  new THREE.MeshLambertMaterial({ color:0xffffff, map:titanTexture })
+  new THREE.MeshStandardMaterial({ color:0xffffff, map:titanTexture, roughness:0.92, metalness:0 })
 );
 titanHolder.add(titan);
 const saturnItem = objects.find(object => object.name === 'Saturn').item;

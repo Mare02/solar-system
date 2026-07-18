@@ -96,7 +96,7 @@ Neptune has 16 known moons:
 
 ## Other missing solar-system objects
 
-- Ring systems around Jupiter, Uranus, and Neptune
+✅ Ring systems around Jupiter, Uranus, and Neptune
 - Asteroid belt
 - Kuiper Belt
 - Comets
