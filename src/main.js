@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
 import '@shoelace-style/shoelace/dist/themes/dark.css';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
@@ -100,11 +101,11 @@ document.addEventListener('keydown', startAmbientAudio, { passive: true });
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x03050d);
-scene.fog = new THREE.FogExp2(0x03050d, 0.00055);
+scene.fog = new THREE.FogExp2(0x03050d, 0.00000002);
 // Keep a sane near plane for stable depth precision across the full system.
 // The satellite's explicit focus distance is still close enough for inspection.
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.01, 10000);
-camera.position.set(0, 115, 245);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.01, 500000);
+camera.position.set(0, 120000, 300000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -115,20 +116,22 @@ document.body.prepend(renderer.domElement);
 // fill is deliberately faint so the night side remains almost black.
 scene.add(new THREE.AmbientLight(0x141a2b, 0.055));
 scene.add(new THREE.HemisphereLight(0x263550, 0x02030a, 0.045));
-// A point light at the Sun gives every body the correct light direction. A
-// softer-than-physical falloff keeps distant planets such as Pluto readable
-// because this visualization compresses the real solar-system distances.
-const sunLight = new THREE.PointLight(0xfff0cc, 1800, 1200, 1.25); scene.add(sunLight);
+// A point light at the Sun gives every body the correct light direction. Its
+// intensity is scaled for the larger scene units while retaining a softened
+// falloff so distant planets remain visible.
+const sunLight = new THREE.PointLight(0xfff0cc, 220000, 300000, 1.25); scene.add(sunLight);
 
 // Radial star field: tiny, distant points make the scene feel deep without distracting from the orbits.
 const starPositions = new Float32Array(2600 * 3);
-for (let i = 0; i < starPositions.length; i += 3) { const r = 240 + Math.random() * 360; const a = Math.random() * Math.PI * 2; const z = Math.random() * 2 - 1; const s = Math.sqrt(1 - z * z); starPositions[i] = r * s * Math.cos(a); starPositions[i + 1] = r * z; starPositions[i + 2] = r * s * Math.sin(a); }
+for (let i = 0; i < starPositions.length; i += 3) { const r = 180000 + Math.random() * 180000; const a = Math.random() * Math.PI * 2; const z = Math.random() * 2 - 1; const s = Math.sqrt(1 - z * z); starPositions[i] = r * s * Math.cos(a); starPositions[i + 1] = r * z; starPositions[i + 2] = r * s * Math.sin(a); }
 const stars = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(starPositions, 3)), new THREE.PointsMaterial({ color: 0x9da9d2, size: 1.15, transparent: true, opacity: 0.75, sizeAttenuation: true })); scene.add(stars);
 
 const textureLoader = new THREE.TextureLoader();
 const sunTexture = textureLoader.load('/textures/sun.png'); sunTexture.colorSpace = THREE.SRGBColorSpace;
 const system = new THREE.Group(); scene.add(system);
-const sun = new THREE.Mesh(new THREE.SphereGeometry(10, 64, 40), new THREE.MeshStandardMaterial({ color: 0xffc247, map:sunTexture, emissive: 0xff8a00, emissiveMap:sunTexture, emissiveIntensity: 1.45, roughness: 0.72, metalness: 0 })); system.add(sun);
+// The Sun is self-luminous, so it must not depend on the point light that it
+// emits. A basic material keeps its disk bright from every viewing distance.
+const sun = new THREE.Mesh(new THREE.SphereGeometry(10, 64, 40), new THREE.MeshBasicMaterial({ color: 0xffd06a, map:sunTexture })); system.add(sun);
 // A single soft sprite avoids the hard, two-tone rings created by nested shells.
 const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 256;
 const glowContext = glowCanvas.getContext('2d');
@@ -142,16 +145,69 @@ const glowTexture = new THREE.CanvasTexture(glowCanvas); glowTexture.colorSpace 
 const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map:glowTexture, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:true }));
 sunGlow.scale.set(52, 52, 1); sunGlow.renderOrder = -1; system.add(sunGlow);
 
+// Camera lens artifacts: the long rays and faint colored ghosts only appear
+// when the Sun is in view, like a real spacecraft camera pointed toward it.
+function createLensTexture(size, draw) {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
+  draw(canvas.getContext('2d'), size);
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+const rayTexture = createLensTexture(512, (context, size) => {
+  const center = size / 2;
+  context.clearRect(0, 0, size, size);
+  context.save(); context.translate(center, center);
+  context.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 20; i++) {
+    context.rotate(Math.PI / 10);
+    const length = i % 5 === 0 ? center * 0.92 : center * 0.42;
+    const width = i % 5 === 0 ? 1.1 : 0.35;
+    const ray = context.createLinearGradient(0, 0, length, 0);
+    ray.addColorStop(0, 'rgba(255,255,255,0.92)');
+    ray.addColorStop(0.14, 'rgba(255,246,216,0.34)');
+    ray.addColorStop(1, 'rgba(255,220,150,0)');
+    context.fillStyle = ray; context.globalAlpha = width;
+    context.beginPath(); context.moveTo(0, -1.5); context.lineTo(length, -0.5); context.lineTo(length, 0.5); context.lineTo(0, 1.5); context.fill();
+  }
+  const core = context.createRadialGradient(0, 0, 0, 0, 0, center * 0.23);
+  core.addColorStop(0, 'rgba(255,255,255,0.95)'); core.addColorStop(0.35, 'rgba(255,245,210,0.34)'); core.addColorStop(1, 'rgba(255,210,120,0)');
+  context.globalAlpha = 1; context.fillStyle = core; context.beginPath(); context.arc(0, 0, center * 0.23, 0, Math.PI * 2); context.fill();
+  context.restore();
+});
+const ghostTexture = createLensTexture(256, (context, size) => {
+  const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(180,220,255,0.22)'); gradient.addColorStop(0.55, 'rgba(90,150,255,0.07)'); gradient.addColorStop(1, 'rgba(40,80,180,0)');
+  context.fillStyle = gradient; context.fillRect(0, 0, size, size);
+});
+const sunLensflare = new Lensflare();
+const sunRayElement = new LensflareElement(rayTexture, 1000, 0, 0xffffff);
+const blueGhostElement = new LensflareElement(ghostTexture, 95, 0.28, 0x8dbdff);
+const orangeGhostElement = new LensflareElement(ghostTexture, 54, 0.52, 0xffb36b);
+const cyanGhostElement = new LensflareElement(ghostTexture, 34, 0.78, 0x9de0ff);
+sunLensflare.addElement(sunRayElement);
+sunLensflare.addElement(blueGhostElement);
+sunLensflare.addElement(orangeGhostElement);
+sunLensflare.addElement(cyanGhostElement);
+sun.add(sunLensflare);
+// A world-space fallback keeps the main radial rays visible even when the
+// lensflare occlusion pass is unavailable or the Sun is very far away.
+const sunRaySprite = new THREE.Sprite(new THREE.SpriteMaterial({ map:rayTexture, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:true }));
+sunRaySprite.renderOrder = 2; system.add(sunRaySprite);
+
+// One scene unit is 69,634 km because the Sun's radius is 10 units. Therefore
+// 1 AU is approximately 2150.32 scene units. Orbital distances use real
+// semimajor axes so the Sun's apparent size is physically meaningful.
+const AU = au => au * 2150.32;
 const planets = [
-  { name:'Mercury', color:0xb8a98f, radius:0.0366, orbit:22, period:0.241, eccentricity:0.206, tilt:0.03, texture:'/textures/mercury.png' }, { name:'Venus', color:0xe5a45d, radius:0.091, orbit:32, period:0.615, eccentricity:0.0067, tilt:0.02, texture:'/textures/venus.png' },
-  { name:'Earth', color:0x4a87c5, radius:0.0916, orbit:44, period:1, eccentricity:0.0167, tilt:0.04, texture:'/textures/earth.png' }, { name:'Mars', color:0xe1c29b, radius:0.0488, orbit:57, period:1.881, eccentricity:0.0934, tilt:0.02, texture:'/textures/mars.png' },
-  { name:'Ceres', color:0x67615b, radius:0.0068, orbit:67, period:4.605, eccentricity:0.0758, tilt:0.18, texture:'/textures/ceres.png' },
-  { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:82, period:11.86, eccentricity:0.0489, tilt:0.04, axialTilt:0.054, texture:'/textures/jupiter.png', ringProfile:'jupiter' }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:110, period:29.46, eccentricity:0.0565, tilt:0.05, texture:'/textures/saturn.png', rings:true },
-  { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:138, period:84.01, eccentricity:0.046, tilt:0.04, axialTilt:0.12, texture:'/textures/uranus.png', ringProfile:'uranus' }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:165, period:164.8, eccentricity:0.009, tilt:0.04, axialTilt:THREE.MathUtils.degToRad(28.3), texture:'/textures/neptune.png', ringProfile:'neptune' },
-  { name:'Pluto', color:0xb4a69a, radius:0.0171, orbit:216, period:247.94, eccentricity:0.2488, tilt:0.30, texture:'/textures/pluto.png' },
-  { name:'Haumea', color:0xd2d6d7, radius:0.0100, orbit:236, period:283.8, eccentricity:0.1913, tilt:0.14, texture:'/textures/haumea.png' },
-  { name:'Makemake', color:0xb87361, radius:0.0103, orbit:249, period:309.9, eccentricity:0.159, tilt:0.13, texture:'/textures/makemake.png' },
-  { name:'Eris', color:0xd9dce0, radius:0.0167, orbit:371, period:557.7, eccentricity:0.4407, tilt:0.44, texture:'/textures/eris.png' }
+  { name:'Mercury', color:0xb8a98f, radius:0.0366, orbit:AU(0.3871), period:0.241, eccentricity:0.206, tilt:0.03, texture:'/textures/mercury.png' }, { name:'Venus', color:0xe5a45d, radius:0.091, orbit:AU(0.7233), period:0.615, eccentricity:0.0067, tilt:0.02, texture:'/textures/venus.png' },
+  { name:'Earth', color:0x4a87c5, radius:0.0916, orbit:AU(1), period:1, eccentricity:0.0167, tilt:0.04, texture:'/textures/earth.png' }, { name:'Mars', color:0xe1c29b, radius:0.0488, orbit:AU(1.5237), period:1.881, eccentricity:0.0934, tilt:0.02, texture:'/textures/mars.png' },
+  { name:'Ceres', color:0x67615b, radius:0.0068, orbit:AU(2.7675), period:4.605, eccentricity:0.0758, tilt:0.18, texture:'/textures/ceres.png' },
+  { name:'Jupiter', color:0xd3a67b, radius:1.003, orbit:AU(5.2028), period:11.86, eccentricity:0.0489, tilt:0.04, axialTilt:0.054, texture:'/textures/jupiter.png', ringProfile:'jupiter' }, { name:'Saturn', color:0xd8c08e, radius:0.837, orbit:AU(9.537), period:29.46, eccentricity:0.0565, tilt:0.05, texture:'/textures/saturn.png', rings:true },
+  { name:'Uranus', color:0x73cbd0, radius:0.364, orbit:AU(19.191), period:84.01, eccentricity:0.046, tilt:0.04, axialTilt:0.12, texture:'/textures/uranus.png', ringProfile:'uranus' }, { name:'Neptune', color:0x527de0, radius:0.354, orbit:AU(30.07), period:164.8, eccentricity:0.009, tilt:0.04, axialTilt:THREE.MathUtils.degToRad(28.3), texture:'/textures/neptune.png', ringProfile:'neptune' },
+  { name:'Pluto', color:0xb4a69a, radius:0.0171, orbit:AU(39.482), period:247.94, eccentricity:0.2488, tilt:0.30, texture:'/textures/pluto.png' },
+  { name:'Haumea', color:0xd2d6d7, radius:0.0100, orbit:AU(43.218), period:283.8, eccentricity:0.1913, tilt:0.14, texture:'/textures/haumea.png' },
+  { name:'Makemake', color:0xb87361, radius:0.0103, orbit:AU(45.43), period:309.9, eccentricity:0.159, tilt:0.13, texture:'/textures/makemake.png' },
+  { name:'Eris', color:0xd9dce0, radius:0.0167, orbit:AU(67.78), period:557.7, eccentricity:0.4407, tilt:0.44, texture:'/textures/eris.png' }
 ];
 const orbitGroup = new THREE.Group(); system.add(orbitGroup);
 const objects = [];
@@ -449,7 +505,7 @@ const sunItem = createLegendItem({ name:'Sun', color:0xffb632, period:'', parent
 const sunObject = { mesh:sun, name:'Sun', item:sunItem };
 sunItem.onclick=()=>focusPlanet(sunObject); pickableBodies.push(sun); sun.userData.focusObject = sunObject;
 
-const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.dampingFactor=0.055; controls.minDistance=0.00000001; controls.maxDistance=1400; controls.target.set(0,0,0); controls.enablePan=true;
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.dampingFactor=0.055; controls.minDistance=0.00000001; controls.maxDistance=1000000; controls.target.set(0,0,0); controls.enablePan=true;
 // Shift + left-drag pans the camera without changing the normal orbit gesture.
 let shiftPan = null;
 const panRight = new THREE.Vector3();
@@ -560,7 +616,7 @@ function focusPlanet(object){
   controls.target.copy(focusPoint); controls.update(); setSelectedLegendItem(object.item);
 }
 focusPlanet(earthObject);
-function focusSystem(){ focusedPlanet=null; camera.near=0.01; camera.updateProjectionMatrix(); camera.position.set(0,115,245); controls.target.set(0,0,0); controls.update(); setSelectedLegendItem(null); }
+function focusSystem(){ focusedPlanet=null; camera.near=0.01; camera.updateProjectionMatrix(); camera.position.set(0,120000,300000); controls.target.set(0,0,0); controls.update(); setSelectedLegendItem(null); }
 addEventListener('keydown', e => { keys[e.code]=true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); if(e.code==='Space') togglePause(); });
 addEventListener('keyup', e => keys[e.code]=false);
 const pauseIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M6 4h4v16H6zm8 0h4v16h-4z'/%3E%3C/svg%3E";
@@ -616,6 +672,16 @@ document.addEventListener('pointerdown', event => {
 const clock = new THREE.Clock();
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); if(running){ elapsed+=dt*simSpeed; objects.forEach(o=>{ const angle=elapsed*(Math.PI*2/(o.period*365.256*86400)); o.holder.position.set(o.orbit*(Math.cos(angle)-o.eccentricity),0,o.semiMinor*Math.sin(angle)); o.mesh.rotation.y += dt*simSpeed*(Math.PI*2/(27*86400)); }); moonOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); moon.rotation.y += dt*simSpeed*(Math.PI*2/(27.3217*86400)); titanOrbit.rotation.y += dt*simSpeed*(Math.PI*2/(15.945*86400)); titan.rotation.y += dt*simSpeed*(Math.PI*2/(15.945*86400)); satelliteOrbit.rotation.y += dt*simSpeed*(Math.PI*2/satelliteOrbitPeriodSeconds); satellite.rotation.y += dt*simSpeed*0.16; sun.rotation.y+=dt*simSpeed*(Math.PI*2/(25.38*86400)); }
   if(focusedPlanet){ focusedPlanet.mesh.getWorldPosition(focusPoint); const followDelta=focusPoint.clone().sub(controls.target); controls.target.copy(focusPoint); camera.position.add(followDelta); }
-  const move = (keys.KeyW||keys.ArrowUp?1:0) - (keys.KeyS||keys.ArrowDown?1:0); const strafe=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0); const lift=(keys.KeyE?1:0)-(keys.KeyQ?1:0); const speed=(keys.ShiftLeft||keys.ShiftRight?1.8:0.7)*dt; camera.translateZ(-move*speed*20); camera.translateX(strafe*speed*20); camera.translateY(lift*speed*20); controls.update(); renderer.render(scene,camera); document.querySelector('#simTime').textContent=`SOL ${String(Math.floor(elapsed/86400)+1).padStart(3,'0')} · ${new Date(elapsed*1000).toISOString().slice(11,19)}`; }
+  const move = (keys.KeyW||keys.ArrowUp?1:0) - (keys.KeyS||keys.ArrowDown?1:0); const strafe=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0); const lift=(keys.KeyE?1:0)-(keys.KeyQ?1:0); const speed=(keys.ShiftLeft||keys.ShiftRight?1.8:0.7)*dt; camera.translateZ(-move*speed*20); camera.translateX(strafe*speed*20); camera.translateY(lift*speed*20); controls.update();
+  const sunDistance = camera.position.distanceTo(sun.position);
+  const sunIsFocused = focusedPlanet?.name === 'Sun';
+  // The Sun-focused camera is close to the disk, so keep its flare compact;
+  // from planets, use the larger photographic starburst.
+  sunRayElement.size = sunIsFocused ? 180 : 1000;
+  blueGhostElement.size = sunIsFocused ? 24 : 95;
+  orangeGhostElement.size = sunIsFocused ? 14 : 54;
+  cyanGhostElement.size = sunIsFocused ? 10 : 34;
+  sunRaySprite.scale.setScalar(sunIsFocused ? Math.max(24, sunDistance * 0.12) : Math.max(90, sunDistance * 0.5));
+  renderer.render(scene,camera); document.querySelector('#simTime').textContent=`SOL ${String(Math.floor(elapsed/86400)+1).padStart(3,'0')} · ${new Date(elapsed*1000).toISOString().slice(11,19)}`; }
 animate();
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
