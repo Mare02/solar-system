@@ -242,6 +242,10 @@ body.ui-hidden .coordinates {
   min-height: 0;
   overflow-y: auto;
   padding-right: 7px;
+  --indent-size: 0.75rem;
+  --indent-guide-width: 1px;
+  --indent-guide-color: rgba(166, 166, 162, 0.18);
+  --indent-guide-offset: 9px;
 }
 
 .legend::-webkit-scrollbar {
@@ -252,10 +256,38 @@ body.ui-hidden .coordinates {
   border-radius: 6px;
 }
 
-.legend-item {
-  display: block;
-  width: 100%;
-  padding: 0;
+.legend-item::part(item) {
+  min-height: 30px;
+  padding: 5px 3px;
+  border-radius: 3px;
+  color: var(--sl-color-neutral-800);
+  font-size: 0.78rem;
+}
+
+/* Keep root entries close to the panel edge, while giving nested entries a
+   deliberate, compact indent of their own. */
+.legend > sl-tree-item::part(indentation) {
+  width: 0;
+}
+
+.legend > sl-tree-item::part(expand-button),
+.legend > sl-tree-item sl-tree-item::part(expand-button) {
+  padding: 4px;
+  width: 0.75rem;
+}
+
+.legend > sl-tree-item sl-tree-item::part(indentation) {
+  width: 0.75rem;
+}
+
+.legend-item::part(item):hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--sl-color-neutral-950);
+}
+
+.legend-item[selected]::part(item) {
+  background: rgba(230, 129, 34, 0.16);
+  color: var(--sl-color-primary-300);
 }
 
 .legend-item::part(label) {
@@ -275,7 +307,12 @@ body.ui-hidden .coordinates {
 
 .legend-item small {
   margin-left: auto;
+  color: var(--sl-color-neutral-600);
   font-size: 9px;
+}
+
+.legend-item.selected small {
+  color: var(--sl-color-primary-400);
 }
 
 .moon-item {

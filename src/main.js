@@ -8,6 +8,8 @@ import '@shoelace-style/shoelace/dist/components/range/range.js';
 import '@shoelace-style/shoelace/dist/components/switch/switch.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
+import '@shoelace-style/shoelace/dist/components/tree/tree.js';
+import '@shoelace-style/shoelace/dist/components/tree-item/tree-item.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -20,7 +22,7 @@ app.innerHTML = `
     <div class="button-row"><sl-button id="pause" variant="primary" size="large">Ⅱ &nbsp; PAUSE</sl-button><sl-button id="reset" class="secondary" variant="default" size="large">↺</sl-button></div>
     <div class="toggle-row"><span>Orbital paths</span><sl-switch id="orbits" checked aria-label="Toggle orbital paths"></sl-switch></div>
     <sl-divider></sl-divider>
-    <div class="legend" id="legend"></div>
+    <sl-tree id="legend" class="legend" selection="single" aria-label="Solar system bodies"></sl-tree>
     <div class="audio-row"><sl-icon-button id="audioToggle" class="audio-on" label="Turn ambient audio off" aria-pressed="true" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M12 3v12.55A4 4 0 1 0 14 19V8h5V3z'/%3E%3C/svg%3E"></sl-icon-button></div>
   </sl-drawer>
   <sl-dialog id="focusConfirm" no-header aria-label="Confirm focus">
@@ -158,6 +160,15 @@ for (const [position, width, color] of ringBands) {
 }
 const ringTexture = new THREE.CanvasTexture(ringCanvas); ringTexture.colorSpace = THREE.SRGBColorSpace;
 const legend = document.querySelector('#legend');
+
+function createLegendItem({ name, color, period, parent }) {
+  const item = document.createElement('sl-tree-item');
+  item.className = 'legend-item';
+  item.innerHTML = `<i style="background:#${color.toString(16).padStart(6, '0')}" aria-hidden="true"></i><span>${name}</span>${period ? `<small>${period}</small>` : ''}`;
+  parent.append(item);
+  return item;
+}
+
 for (const p of planets) {
   const semiMinor = p.orbit * Math.sqrt(1 - p.eccentricity * p.eccentricity);
   const points = []; for (let i=0;i<=128;i++){ const a=i/128*Math.PI*2; points.push(new THREE.Vector3(p.orbit*(Math.cos(a)-p.eccentricity),0,semiMinor*Math.sin(a))); }
@@ -170,7 +181,7 @@ for (const p of planets) {
   if(texture) texture.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.radius, 32, 20), new THREE.MeshLambertMaterial({ color:p.color, map:texture })); holder.add(mesh);
   if (p.rings) { const ring = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.72, 96), new THREE.MeshBasicMaterial({ map:ringTexture, color:0xffffff, side:THREE.DoubleSide, transparent:true, opacity:0.82, depthWrite:false })); ring.rotation.x=Math.PI/2.35; holder.add(ring); }
-  const item = document.createElement('sl-button'); item.className='legend-item'; item.variant='text'; item.innerHTML=`<i style="background:#${p.color.toString(16).padStart(6,'0')}"></i><span>${p.name}</span><small>${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years</small>`; legend.append(item);
+  const item = createLegendItem({ name: p.name, color: p.color, period: `${p.period < 2 ? p.period.toFixed(3) : p.period.toFixed(2)} years`, parent: legend });
   const object = { holder, mesh, period:p.period, orbit:p.orbit, eccentricity:p.eccentricity, semiMinor, name:p.name, item };
   item.onclick=()=>focusPlanet(object); objects.push(object); pickableBodies.push(mesh); mesh.userData.focusObject = object; if(p.name === 'Earth') earthObject = object;
 }
@@ -188,10 +199,11 @@ const moonOrbitLine = new THREE.Line(
 moonOrbit.add(moonOrbitLine);
 const moonHolder = new THREE.Group(); moonHolder.position.set(1.65, 0, 0); moonOrbit.add(moonHolder);
 const moon = new THREE.Mesh(new THREE.SphereGeometry(0.025, 32, 20), new THREE.MeshLambertMaterial({ color:0xbab8b0, map:moonTexture })); moonHolder.add(moon);
-const moonItem = document.createElement('sl-button'); moonItem.className='legend-item moon-item'; moonItem.variant='text'; moonItem.innerHTML='<i style="background:#bab8b0"></i><span>Moon</span><small>27.32 days</small>'; legend.append(moonItem);
+const earthItem = objects.find(object => object.name === 'Earth').item;
+const moonItem = createLegendItem({ name: 'Moon', color: 0xbab8b0, period: '27.32 days', parent: earthItem }); moonItem.classList.add('moon-item');
 const moonObject = { holder:moonHolder, mesh:moon, period:27.3217/365.256, name:'Moon', item:moonItem };
-moonItem.onclick=()=>focusPlanet(moonObject); pickableBodies.push(moon); moon.userData.focusObject = moonObject;
-const sunItem = document.createElement('sl-button'); sunItem.className='legend-item sun-item'; sunItem.variant='text'; sunItem.innerHTML='<i style="background:#ffb632"></i><span>Sun</span><small>focus</small>'; legend.prepend(sunItem);
+moonItem.onclick=(event)=>{ event.stopPropagation(); focusPlanet(moonObject); }; pickableBodies.push(moon); moon.userData.focusObject = moonObject;
+const sunItem = createLegendItem({ name:'Sun', color:0xffb632, period:'', parent: legend }); sunItem.classList.add('sun-item'); legend.prepend(sunItem);
 const sunObject = { mesh:sun, name:'Sun', item:sunItem };
 sunItem.onclick=()=>focusPlanet(sunObject); pickableBodies.push(sun); sun.userData.focusObject = sunObject;
 
@@ -293,7 +305,7 @@ renderer.domElement.addEventListener('pointerup', event => {
 renderer.domElement.addEventListener('pointercancel', () => { clickStart = null; }, true);
 let running=true, simSpeed=1, elapsed=0, focusedPlanet=earthObject; const keys = {};
 const focusPoint = new THREE.Vector3();
-function setSelectedLegendItem(selectedItem){ document.querySelectorAll('.legend-item').forEach(item=>{ item.variant='text'; item.classList.remove('selected'); }); if(selectedItem) selectedItem.variant='primary'; }
+function setSelectedLegendItem(selectedItem){ document.querySelectorAll('.legend-item').forEach(item=>{ item.selected = item === selectedItem; item.classList.toggle('selected', item === selectedItem); }); }
 setSelectedLegendItem(earthObject.item);
 function focusPlanet(object){ focusedPlanet=object; object.mesh.getWorldPosition(focusPoint); const distance=Math.max(object.mesh.geometry.parameters.radius*25, 0.5); camera.position.copy(focusPoint).add(new THREE.Vector3(distance*0.7, distance*0.48, distance)); controls.target.copy(focusPoint); controls.update(); setSelectedLegendItem(object.item); }
 focusPlanet(earthObject);
